@@ -3,7 +3,10 @@
     <h1>Img to Audio Encoder</h1>
     <input type="file" @change="handleImageUpload" accept="image/png, image/jpeg" />
     <canvas ref="canvas" width="500" height="500" style="border: 1px solid black"></canvas>
-    <button v-if="audioUrl" @click="downloadAudio">Download Audio</button>
+    <div v-if="audioUrl" style="margin-top: 1rem">
+      <audio :src="audioUrl" controls></audio>
+      <button @click="downloadAudio">Download Audio</button>
+    </div>
   </main>
 </template>
 
