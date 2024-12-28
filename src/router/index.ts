@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 import HomeView from '../views/HomeView.vue'
 import DecoderStaticView from '../views/DecoderStaticView.vue'
 import EncoderStaticView from '@/views/EncoderStaticView.vue'
+import DecoderDynamicView from '@/views/DecoderDynamicView.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -20,6 +21,11 @@ const router = createRouter({
       path: '/encoder-static',
       name: 'encoder-static',
       component: EncoderStaticView,
+    },
+    {
+      path: '/decoder-dynamic',
+      name: 'decoder-dynamic',
+      component: DecoderDynamicView,
     },
     {
       path: '/about',
