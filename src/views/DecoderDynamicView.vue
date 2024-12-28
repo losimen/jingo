@@ -1,6 +1,6 @@
 <template>
   <main>
-    <h1>Real-Time Audio Processing</h1>
+    <h1>Decoder Audio Processing</h1>
     <button @click="startAudio">Start Audio</button>
     <button @click="stopAudio" :disabled="!isStreaming">Stop Audio</button>
     <canvas ref="canvas" width="800" height="300"></canvas>
@@ -62,7 +62,7 @@ function visualize() {
   if (!ctx) return
 
   function draw() {
-    if (!analyser || !dataArray || !isStreaming.value) return
+    if (!analyser || !dataArray || !isStreaming.value || !canvas.value || !ctx) return
 
     analyser.getByteTimeDomainData(dataArray)
 
