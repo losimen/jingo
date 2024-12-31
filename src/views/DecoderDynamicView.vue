@@ -3,7 +3,8 @@
     <h1>Decoder Audio Processing</h1>
     <button @click="startAudio">Start Audio</button>
     <button @click="stopAudio" :disabled="!isStreaming">Stop Audio</button>
-    <canvas ref="canvas" width="800" height="300"></canvas>
+    <canvas ref="canvasDominant" width="800" height="300"></canvas>
+    <canvas ref="canvasFFT" width="800" height="300"></canvas>
   </main>
 </template>
 
@@ -11,7 +12,8 @@
 import { ref, onUnmounted } from 'vue'
 
 const isStreaming = ref(false)
-const canvas = ref<HTMLCanvasElement | null>(null)
+const canvasDominant = ref<HTMLCanvasElement | null>(null)
+const canvasFFT = ref<HTMLCanvasElement | null>(null)
 let audioContext: AudioContext | null = null
 let analyser: AnalyserNode | null = null
 let dataArray: Uint8Array | null = null
@@ -56,28 +58,35 @@ function stopAudio() {
 }
 
 function visualize() {
-  if (!canvas.value || !analyser || !dataArray) return
+  if (!canvasDominant.value || !analyser || !dataArray) return
 
-  const ctx = canvas.value.getContext('2d')
+  const ctx = canvasDominant.value.getContext('2d')
   if (!ctx) return
 
   function draw() {
-    if (!analyser || !dataArray || !isStreaming.value || !canvas.value || !ctx || !audioContext)
+    if (
+      !analyser ||
+      !dataArray ||
+      !isStreaming.value ||
+      !canvasDominant.value ||
+      !ctx ||
+      !audioContext
+    )
       return
 
     analyser.getByteFrequencyData(dataArray)
 
-    ctx.clearRect(0, 0, canvas.value.width, canvas.value.height)
+    ctx.clearRect(0, 0, canvasDominant.value.width, canvasDominant.value.height)
 
     ctx.fillStyle = '#00ff00'
-    const barWidth = canvas.value.width / dataArray.length
+    const barWidth = canvasDominant.value.width / dataArray.length
 
     let maxAmplitude = 0
     let dominantFrequencyIndex = 0
 
     for (let i = 0; i < dataArray.length; i++) {
       const barHeight = dataArray[i]
-      ctx.fillRect(i * barWidth, canvas.value.height - barHeight, barWidth, barHeight)
+      ctx.fillRect(i * barWidth, canvasDominant.value.height - barHeight, barWidth, barHeight)
 
       if (dataArray[i] > maxAmplitude) {
         maxAmplitude = dataArray[i]
