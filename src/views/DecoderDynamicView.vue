@@ -62,36 +62,35 @@ function visualize() {
   if (!ctx) return
 
   function draw() {
-    if (!analyser || !dataArray || !isStreaming.value || !canvas.value || !ctx) return
+    if (!analyser || !dataArray || !isStreaming.value || !canvas.value || !ctx || !audioContext)
+      return
 
-    analyser.getByteTimeDomainData(dataArray)
+    analyser.getByteFrequencyData(dataArray)
 
-    // Clear the canvas
     ctx.clearRect(0, 0, canvas.value.width, canvas.value.height)
 
-    // Draw waveform
-    ctx.lineWidth = 2
-    ctx.strokeStyle = '#00ff00'
-    ctx.beginPath()
+    ctx.fillStyle = '#00ff00'
+    const barWidth = canvas.value.width / dataArray.length
 
-    const sliceWidth = canvas.value.width / dataArray.length
-    let x = 0
+    let maxAmplitude = 0
+    let dominantFrequencyIndex = 0
 
     for (let i = 0; i < dataArray.length; i++) {
-      const v = dataArray[i] / 128.0
-      const y = (v * canvas.value.height) / 2
+      const barHeight = dataArray[i]
+      ctx.fillRect(i * barWidth, canvas.value.height - barHeight, barWidth, barHeight)
 
-      if (i === 0) {
-        ctx.moveTo(x, y)
-      } else {
-        ctx.lineTo(x, y)
+      if (dataArray[i] > maxAmplitude) {
+        maxAmplitude = dataArray[i]
+        dominantFrequencyIndex = i
       }
-
-      x += sliceWidth
     }
 
-    ctx.lineTo(canvas.value.width, canvas.value.height / 2)
-    ctx.stroke()
+    const nyquist = audioContext.sampleRate / 2
+    const dominantFrequency = (dominantFrequencyIndex / dataArray.length) * nyquist
+
+    ctx.fillStyle = '#ffffff'
+    ctx.font = '16px Arial'
+    ctx.fillText(`Dominant Frequency: ${dominantFrequency.toFixed(2)} Hz`, 10, 20)
 
     animationFrameId = requestAnimationFrame(draw)
   }
