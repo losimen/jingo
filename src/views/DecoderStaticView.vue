@@ -2,7 +2,7 @@
   <main>
     <h1>Audio to Black and White Image</h1>
     <input type="file" @change="handleFileUpload" accept=".wav" />
-    <canvas ref="canvas"></canvas>
+    <svg ref="svg" xmlns="http://www.w3.org/2000/svg"></svg>
   </main>
 </template>
 
@@ -10,7 +10,7 @@
 import { ref } from 'vue'
 import { transform, fftfreq } from './fft_small'
 
-const canvas = ref<HTMLCanvasElement | null>(null)
+const svg = ref<SVGSVGElement | null>(null)
 
 async function handleFileUpload(event: Event) {
   const input = event.target as HTMLInputElement
@@ -91,13 +91,10 @@ function decoder(signal: Float32Array, sampleRate: number) {
 
   console.log('matrix', imgMatrix)
 
-  if (!canvas.value) {
-    console.error('Canvas element not found.')
+  if (!svg.value) {
+    console.error('SVG element not found.')
     return
   }
-
-  const ctx = canvas.value.getContext('2d')
-  if (!ctx) return
 
   function freqToPixel(freq: number) {
     return Math.floor(((freq - 1500) / 800) * 255)
@@ -109,26 +106,28 @@ function decoder(signal: Float32Array, sampleRate: number) {
 
   const width = pixelMatrix[0]?.length || 1
   const height = pixelMatrix.length || 1
-  canvas.value.width = width
-  canvas.value.height = height
 
-  canvas.value.style.width = `${width * 2}px`
-  canvas.value.style.height = `${height * 2}px`
+  svg.value.innerHTML = '' // Clear the SVG content
+  svg.value.setAttribute('width', `${width * 2}`)
+  svg.value.setAttribute('height', `${height * 2}`)
+  svg.value.style.width = `${width * 2}px`
+  svg.value.style.height = `${height * 2}px`
 
-  const imageData = ctx.createImageData(width, height)
-  let pixelIndex = 0
+  const rectWidth = 2
+  const rectHeight = 2
 
-  for (const row of pixelMatrix) {
-    for (const pixel of row) {
-      imageData.data[pixelIndex] = pixel
-      imageData.data[pixelIndex + 1] = pixel
-      imageData.data[pixelIndex + 2] = pixel
-      imageData.data[pixelIndex + 3] = 255
-      pixelIndex += 4
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const pixelValue = pixelMatrix[y][x]
+      const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect')
+      rect.setAttribute('x', (x * rectWidth).toString())
+      rect.setAttribute('y', (y * rectHeight).toString())
+      rect.setAttribute('width', rectWidth.toString())
+      rect.setAttribute('height', rectHeight.toString())
+      rect.setAttribute('fill', `rgb(${pixelValue}, ${pixelValue}, ${pixelValue})`)
+      svg.value.appendChild(rect)
     }
   }
-
-  ctx.putImageData(imageData, 0, 0)
 }
 </script>
 
@@ -138,7 +137,7 @@ main {
   margin-top: 2rem;
 }
 
-canvas {
+svg {
   border: 1px solid #ccc;
   margin-top: 1rem;
 }
