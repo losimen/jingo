@@ -1,200 +1,124 @@
 <template>
   <main>
-    <h1>Decoder Audio Processing</h1>
-    <button @click="startAudio">Start Audio</button>
-    <button @click="stopAudio" :disabled="!isStreaming">Stop Audio</button>
-    <canvas ref="canvasDominant" width="800" height="300"></canvas>
-    <canvas ref="canvasFFT" width="800" height="300"></canvas>
+    <h1>Real-Time Audio to Black and White Image</h1>
+    <button @click="startProcessing">Start Processing</button>
+    <button @click="stopProcessing" :disabled="!isProcessing">Stop Processing</button>
+    <svg ref="svg" xmlns="http://www.w3.org/2000/svg"></svg>
   </main>
 </template>
 
 <script setup lang="ts">
-import { ref, onUnmounted, onMounted, watch } from 'vue'
+import { ref } from 'vue'
+import { transform, fftfreq } from './fft_small'
 
-const isStreaming = ref(false)
-const canvasDominant = ref<HTMLCanvasElement | null>(null)
-const canvasFFT = ref<HTMLCanvasElement | null>(null)
+const svg = ref<SVGSVGElement | null>(null)
+const isProcessing = ref(false)
+
 let audioContext: AudioContext | null = null
-let imageData: ImageData | null = null
-let analyser: AnalyserNode | null = null
-let dataArray: Uint8Array | null = null
-let animationFrameId: number | null = null
-const dominantFrequencies = ref<number[]>([])
-let x = 0
-let y = 0
+let processor: ScriptProcessorNode | null = null
+let source: MediaStreamAudioSourceNode | null = null
 
-// function freqToPixel(freq: number) {
-//   return Math.floor(((freq - 1500) / 800) * 255)
-// }
-
-function freqToPixel(frequency: number): [number, number, number] {
-  // Map frequency to RGB color
-  const r = Math.floor(((frequency - 1100) / (2900 - 1100)) * 255)
-  const g = 100
-  const b = Math.floor(255 - ((frequency - 1100) / (2900 - 1100)) * 255)
-  return [r, g, b]
-}
-
-function drawPicture(ctx) {
-  if (!canvasFFT.value || !ctx || !imageData) {
-    return
-  }
-  const canvasWidth = canvasFFT.value.width
-
-  const currentFrequency = dominantFrequencies.value.shift()
-  if (!currentFrequency) {
-    return
-  }
-
-  if (currentFrequency < 1100 || currentFrequency > 2900) {
-    console.log('Frequency out of range:', currentFrequency)
-    return
-  }
-
-  if (currentFrequency > 1100 && currentFrequency < 1400) {
-    console.log('Frequency in the first step:', currentFrequency)
-    if (x >= canvasWidth) {
-      x = 0
-      y += 1
-    }
-  }
-
-  const [r, g, b] = freqToPixel(currentFrequency)
-  const index = (y * canvasWidth + x) * 4
-
-  imageData.data[index] = r // Red channel
-  imageData.data[index + 1] = g // Green channel
-  imageData.data[index + 2] = b // Blue channel
-  imageData.data[index + 3] = 255 // Alpha channel (fully opaque)
-
-  x += 1
-
-  ctx.putImageData(imageData, 0, 0) // Draw the updated image data to the canvas
-}
-
-watch(dominantFrequencies, () => {
-  if (!canvasFFT.value) {
-    return
-  }
-
-  const ctx = canvasFFT.value.getContext('2d')
-    if (!ctx) {
-      return
-    }
-
-  drawPicture(ctx)
-},
-  { deep: true }
-)
-
-onMounted(() => {
-  if (!canvasFFT.value) {
-    return
-  }
-
-  const ctx = canvasFFT.value.getContext('2d')
-  if (!ctx) {
-    return
-  }
-
-  const canvasWidth = canvasFFT.value.width
-  const canvasHeight = canvasFFT.value.height
-
-  imageData = ctx.createImageData(canvasWidth, canvasHeight)
-})
-
-function startAudio() {
-  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-    alert('Your browser does not support audio input.')
-    return
-  }
+function startProcessing() {
+  if (isProcessing.value) return
 
   navigator.mediaDevices
     .getUserMedia({ audio: true })
     .then((stream) => {
-      isStreaming.value = true
-
       audioContext = new AudioContext()
-      const source = audioContext.createMediaStreamSource(stream)
-      analyser = audioContext.createAnalyser()
-      analyser.fftSize = 2048
-      dataArray = new Uint8Array(analyser.frequencyBinCount)
+      source = audioContext.createMediaStreamSource(stream)
+      processor = audioContext.createScriptProcessor(2048, 1, 1)
 
-      source.connect(analyser)
+      processor.onaudioprocess = (event) => {
+        const inputBuffer = event.inputBuffer.getChannelData(0)
+        processAudioChunk(inputBuffer, audioContext!.sampleRate)
+      }
 
-      visualize()
+      source.connect(processor)
+      processor.connect(audioContext.destination)
+
+      isProcessing.value = true
     })
-    .catch((error) => {
-      console.error('Error accessing audio input:', error)
+    .catch((err) => {
+      console.error('Error accessing microphone:', err)
     })
 }
 
-function stopAudio() {
+function stopProcessing() {
+  if (processor) {
+    processor.disconnect()
+    processor = null
+  }
+
+  if (source) {
+    source.disconnect()
+    source = null
+  }
+
   if (audioContext) {
     audioContext.close()
     audioContext = null
   }
-  isStreaming.value = false
-  if (animationFrameId) {
-    cancelAnimationFrame(animationFrameId)
-    animationFrameId = null
-  }
+
+  isProcessing.value = false
 }
 
-function visualize() {
-  if (!canvasDominant.value || !analyser || !dataArray) return
+function processAudioChunk(signal: Float32Array, sampleRate: number) {
+  const CHUNK_SIZE = 2048
 
-  const ctx = canvasDominant.value.getContext('2d')
-  if (!ctx) return
+  const real = Float64Array.from(signal)
+  const imag = new Float64Array(real.length).fill(0)
 
-  function drawDominant() {
-    if (
-      !analyser ||
-      !dataArray ||
-      !isStreaming.value ||
-      !canvasDominant.value ||
-      !ctx ||
-      !audioContext
-    )
-      return
+  transform(real, imag)
 
-    analyser.getByteFrequencyData(dataArray)
+  const magnitude = Array.from(real.map((re, idx) => Math.sqrt(re ** 2 + imag[idx] ** 2)))
+  const frequencies = fftfreq(real.length, 1 / sampleRate)
 
-    ctx.clearRect(0, 0, canvasDominant.value.width, canvasDominant.value.height)
+  const halfLength = Math.floor(magnitude.length / 2)
+  const maxIndex = magnitude
+    .slice(0, halfLength)
+    .indexOf(Math.max(...magnitude.slice(0, halfLength)))
+  const dominantFreq = frequencies[maxIndex]
 
-    ctx.fillStyle = '#00ff00'
-    const barWidth = canvasDominant.value.width / dataArray.length
-
-    let maxAmplitude = 0
-    let dominantFrequencyIndex = 0
-
-    for (let i = 0; i < dataArray.length; i++) {
-      const barHeight = dataArray[i]
-      ctx.fillRect(i * barWidth, canvasDominant.value.height - barHeight, barWidth, barHeight)
-
-      if (dataArray[i] > maxAmplitude) {
-        maxAmplitude = dataArray[i]
-        dominantFrequencyIndex = i
-      }
-    }
-
-    const nyquist = audioContext.sampleRate / 2
-    const dominantFrequency = (dominantFrequencyIndex / dataArray.length) * nyquist
-    dominantFrequencies.value.push(dominantFrequency)
-    console.log(dominantFrequencies)
-
-    ctx.fillStyle = '#ffffff'
-    ctx.font = '16px Arial'
-    ctx.fillText(`Dominant Frequency: ${dominantFrequency.toFixed(2)} Hz`, 10, 20)
-
-    animationFrameId = requestAnimationFrame(drawDominant)
-  }
-  drawDominant()
+  updateSVG(dominantFreq)
 }
 
-onUnmounted(() => {
-  stopAudio()
-})
+let currentRow = 0 // Keeps track of the current row
+
+function updateSVG(freq: number) {
+  if (!svg.value) {
+    console.error('SVG element not found.')
+    return
+  }
+
+  function freqToPixel(freq: number) {
+    return Math.floor(((freq - 1500) / 800) * 255)
+  }
+
+  const pixelValue = Math.max(0, Math.min(255, freqToPixel(freq)))
+
+  // Check for 1200 Hz frequency
+  if (freq > 1100 && freq < 1400) {
+    currentRow++ // Start a new row
+  }
+
+  const rectWidth = 2
+  const rectHeight = 2
+
+  const currentRects = svg.value.querySelectorAll('rect')
+  const width = Math.sqrt(currentRects.length + 1)
+
+  const x = currentRects.length % width // Keep X aligned within the row
+  const y = currentRow * rectHeight // Update Y based on the current row
+
+  const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect')
+  rect.setAttribute('x', (x * rectWidth).toString())
+  rect.setAttribute('y', y.toString())
+  rect.setAttribute('width', rectWidth.toString())
+  rect.setAttribute('height', rectHeight.toString())
+  rect.setAttribute('fill', `rgb(${pixelValue}, ${pixelValue}, ${pixelValue})`)
+
+  svg.value.appendChild(rect)
+}
 </script>
 
 <style>
@@ -203,8 +127,10 @@ main {
   margin-top: 2rem;
 }
 
-canvas {
+svg {
   border: 1px solid #ccc;
   margin-top: 1rem;
+  display: block;
+  margin: 0 auto;
 }
 </style>
