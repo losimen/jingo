@@ -9,22 +9,83 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onUnmounted, onMounted } from 'vue'
+import { ref, onUnmounted, onMounted, watch } from 'vue'
 
 const isStreaming = ref(false)
 const canvasDominant = ref<HTMLCanvasElement | null>(null)
 const canvasFFT = ref<HTMLCanvasElement | null>(null)
 let audioContext: AudioContext | null = null
+let imageData: ImageData | null = null
 let analyser: AnalyserNode | null = null
 let dataArray: Uint8Array | null = null
 let animationFrameId: number | null = null
-const dominantFrequencies: number[] = []
+const dominantFrequencies = ref<number[]>([])
+let x = 0
+let y = 0
 
-const STEP_FREQUENCY = 1200
+// function freqToPixel(freq: number) {
+//   return Math.floor(((freq - 1500) / 800) * 255)
+// }
 
-function freqToPixel(freq: number) {
-  return Math.floor(((freq - 1500) / 800) * 255)
+function freqToPixel(frequency: number): [number, number, number] {
+  // Map frequency to RGB color
+  const r = Math.floor(((frequency - 1100) / (2900 - 1100)) * 255)
+  const g = 100
+  const b = Math.floor(255 - ((frequency - 1100) / (2900 - 1100)) * 255)
+  return [r, g, b]
 }
+
+function drawPicture(ctx) {
+  if (!canvasFFT.value || !ctx || !imageData) {
+    return
+  }
+  const canvasWidth = canvasFFT.value.width
+
+  const currentFrequency = dominantFrequencies.value.shift()
+  if (!currentFrequency) {
+    return
+  }
+
+  if (currentFrequency < 1100 || currentFrequency > 2900) {
+    console.log('Frequency out of range:', currentFrequency)
+    return
+  }
+
+  if (currentFrequency > 1100 && currentFrequency < 1400) {
+    console.log('Frequency in the first step:', currentFrequency)
+    if (x >= canvasWidth) {
+      x = 0
+      y += 1
+    }
+  }
+
+  const [r, g, b] = freqToPixel(currentFrequency)
+  const index = (y * canvasWidth + x) * 4
+
+  imageData.data[index] = r // Red channel
+  imageData.data[index + 1] = g // Green channel
+  imageData.data[index + 2] = b // Blue channel
+  imageData.data[index + 3] = 255 // Alpha channel (fully opaque)
+
+  x += 1
+
+  ctx.putImageData(imageData, 0, 0) // Draw the updated image data to the canvas
+}
+
+watch(dominantFrequencies, () => {
+  if (!canvasFFT.value) {
+    return
+  }
+
+  const ctx = canvasFFT.value.getContext('2d')
+    if (!ctx) {
+      return
+    }
+
+  drawPicture(ctx)
+},
+  { deep: true }
+)
 
 onMounted(() => {
   if (!canvasFFT.value) {
@@ -39,62 +100,7 @@ onMounted(() => {
   const canvasWidth = canvasFFT.value.width
   const canvasHeight = canvasFFT.value.height
 
-  const imageData = ctx.createImageData(canvasWidth, canvasHeight)
-  let x = 0
-  let y = 0
-
-  function freqToPixel(frequency: number): [number, number, number] {
-    // Map frequency to RGB color
-    const r = Math.floor(((frequency - 1100) / (2900 - 1100)) * 255)
-    const g = 100
-    const b = Math.floor(255 - ((frequency - 1100) / (2900 - 1100)) * 255)
-    return [r, g, b]
-  }
-
-  function drawPicture() {
-    if (!canvasFFT.value || !ctx) {
-      requestAnimationFrame(drawPicture)
-      return
-    }
-    console.log(dominantFrequencies)
-
-    const currentFrequency = dominantFrequencies.shift()
-    if (!currentFrequency) {
-      requestAnimationFrame(drawPicture)
-      return
-    }
-
-    if (currentFrequency < 1100 || currentFrequency > 2900) {
-      console.log('Frequency out of range:', currentFrequency)
-      requestAnimationFrame(drawPicture)
-      return
-    }
-
-    if (currentFrequency > 1100 && currentFrequency < 1400) {
-      console.log('Frequency in the first step:', currentFrequency)
-      if (x >= canvasWidth) {
-        x = 0
-        y += 1
-      }
-      requestAnimationFrame(drawPicture)
-    }
-
-    const [r, g, b] = freqToPixel(currentFrequency)
-    const index = (y * canvasWidth + x) * 4
-
-    imageData.data[index] = r // Red channel
-    imageData.data[index + 1] = g // Green channel
-    imageData.data[index + 2] = b // Blue channel
-    imageData.data[index + 3] = 255 // Alpha channel (fully opaque)
-
-    x += 1
-    // console.log('Drawing pixel at', x, y)
-
-    ctx.putImageData(imageData, 0, 0) // Draw the updated image data to the canvas
-    requestAnimationFrame(drawPicture)
-  }
-
-  drawPicture()
+  imageData = ctx.createImageData(canvasWidth, canvasHeight)
 })
 
 function startAudio() {
@@ -174,7 +180,8 @@ function visualize() {
 
     const nyquist = audioContext.sampleRate / 2
     const dominantFrequency = (dominantFrequencyIndex / dataArray.length) * nyquist
-    dominantFrequencies.push(dominantFrequency)
+    dominantFrequencies.value.push(dominantFrequency)
+    console.log(dominantFrequencies)
 
     ctx.fillStyle = '#ffffff'
     ctx.font = '16px Arial'
