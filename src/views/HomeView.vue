@@ -4,6 +4,10 @@
     <button @click="startAudio">Start Audio</button>
     <button @click="stopAudio" :disabled="!isStreaming">Stop Audio</button>
     <canvas ref="canvas" width="800" height="300"></canvas>
+
+    <router-link to="encoder-static"> Encoder Static </router-link>
+    <router-link to="decoder-static"> Decoder Static </router-link>
+    <router-link to="decoder-dynamic"> Decoder Dynamic </router-link>
   </main>
 </template>
 
