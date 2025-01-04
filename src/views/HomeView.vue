@@ -66,7 +66,7 @@ function visualize() {
   if (!ctx) return
 
   function draw() {
-    if (!analyser || !dataArray || !isStreaming.value) return
+    if (!analyser || !dataArray || !isStreaming.value || !ctx || !canvas.value) return
 
     analyser.getByteTimeDomainData(dataArray)
 
