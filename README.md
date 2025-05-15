@@ -1,7 +1,6 @@
 # jingo
 
 SSTV - encoder and decoder.
-Demo: http://129.151.204.232:3001/
 Info: https://www.sstv-handbook.com/
 
 ## Project Setup
